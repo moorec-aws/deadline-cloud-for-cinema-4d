@@ -4,7 +4,7 @@ from __future__ import annotations
 import os
 from dataclasses import dataclass
 from enum import IntEnum
-from typing import Iterator, Optional
+from typing import Iterator, Optional, Tuple
 
 import c4d
 
@@ -140,20 +140,24 @@ class Scene:
             "_frame": doc.GetTime().GetFrame(doc.GetFps()),
         }
         if take:
-            rpd["take"] = take
+            rpd["_take"] = take
         image_paths = set()
         if render_data[c4d.RDATA_SAVEIMAGE]:
             path = render_data[c4d.RDATA_PATH]
             xpath = c4d.modules.tokensystem.FilenameConvertTokens(path, rpd)
             if not os.path.isabs(xpath):
+                if xpath.startswith("./"):
+                    xpath = xpath[2:]
                 xpath = os.path.join(doc_path, xpath)
-            image_paths.add(os.path.dirname(xpath))
+            image_paths.add(os.path.dirname(os.path.normpath(xpath)))
         if render_data[c4d.RDATA_MULTIPASS_SAVEIMAGE]:
             path = render_data[c4d.RDATA_MULTIPASS_FILENAME]
             xpath = c4d.modules.tokensystem.FilenameConvertTokens(path, rpd)
             if not os.path.isabs(xpath):
+                if xpath.startswith("./"):
+                    xpath = xpath[2:]
                 xpath = os.path.join(doc_path, xpath)
-            image_paths.add(os.path.dirname(xpath))
+            image_paths.add(os.path.dirname(os.path.normpath(xpath)))
         return image_paths
 
     @staticmethod
@@ -171,12 +175,41 @@ class Scene:
         return render_data
 
     @staticmethod
-    def output_path() -> str:
+    def get_output_paths(take=None) -> Tuple[str, str]:
         """
-        Returns the path to the default output directory.
+        Returns the default and multi-pass output paths.
         """
         doc = c4d.documents.GetActiveDocument()
-        return doc.GetDocumentPath()
+        doc_path = doc.GetDocumentPath()
+        render_data = Scene.get_render_data(doc=doc, take=take)
+        render_base_container_instance = render_data.GetDataInstance()
+        rpd = {
+            "_doc": doc,
+            "_rData": render_data,
+            "_rBc": render_base_container_instance,
+            "_frame": doc.GetTime().GetFrame(doc.GetFps()),
+        }
+        if take:
+            rpd["_take"] = take
+        default_out = ""
+        multi_out = ""
+        if render_data[c4d.RDATA_SAVEIMAGE]:
+            path = render_data[c4d.RDATA_PATH]
+            xpath = c4d.modules.tokensystem.FilenameConvertTokens(path, rpd)
+            if not os.path.isabs(xpath):
+                if xpath.startswith("./"):
+                    xpath = xpath[2:]
+                xpath = os.path.join(doc_path, xpath)
+            default_out = os.path.normpath(xpath)
+        if render_data[c4d.RDATA_MULTIPASS_SAVEIMAGE]:
+            path = render_data[c4d.RDATA_MULTIPASS_FILENAME]
+            xpath = c4d.modules.tokensystem.FilenameConvertTokens(path, rpd)
+            if not os.path.isabs(xpath):
+                if xpath.startswith("./"):
+                    xpath = xpath[2:]
+                xpath = os.path.join(doc_path, xpath)
+            multi_out = os.path.normpath(xpath)
+        return default_out, multi_out
 
 
 @dataclass

@@ -8,6 +8,7 @@ import re
 import threading
 import time
 from functools import wraps
+import platform
 from typing import Callable
 
 from openjd.adaptor_runtime.adaptors import Adaptor, AdaptorDataValidators, SemanticVersion
@@ -272,7 +273,9 @@ class Cinema4DAdaptor(Adaptor[AdaptorConfiguration]):
         # XXX: on linux we need to run the c4d env setup script first, this env
         # var allows us to use a wrapper around Commandline. Ideally a conda env
         # does this for us.
-        c4d_exe_env = os.getenv("DEADLINE_CINEMA4D_EXE", "")
+        # On Linux this should be a path similar to this: /opt/maxon/cinema4dr2024.200/bin/Commandline
+        # On Windows it should be a path similar to this: "C:\Program Files\Maxon Cinema 4D R26\Commandline.exe"
+        c4d_exe_env = os.environ.get("CINEMA4D_ADAPTOR_COMMANDLINE_EXE", "")
         if not c4d_exe_env:
             c4d_exe = "Commandline"
         else:
@@ -298,8 +301,12 @@ class Cinema4DAdaptor(Adaptor[AdaptorConfiguration]):
             new_module_path = plugin_dir + os.pathsep + module_path
         os.environ[module_path_key] = new_module_path
 
+        arguments = [c4d_exe, "-nogui", "-DeadlineCloudClient"]
+        if "linux" in platform.system().lower():
+            _logger.info("Inserting Linux adaptor wrapper script")
+            arguments.insert(0, os.path.join(os.path.dirname(__file__), "adaptor.sh"))
         self._cinema4d_client = LoggingSubprocess(
-            args=[c4d_exe, "-nogui", "-DeadlineCloudClient"],
+            args=arguments,
             stdout_handler=regexhandler,
             stderr_handler=regexhandler,
         )
@@ -439,4 +446,5 @@ class Cinema4DAdaptor(Adaptor[AdaptorConfiguration]):
         set to be added to the action queue.
         """
         for name in _FIRST_CINEMA4D_ACTIONS:
-            self._action_queue.enqueue_action(Action(name, {name: self.init_data[name]}))
+            if name in self.init_data:
+                self._action_queue.enqueue_action(Action(name, {name: self.init_data[name]}))

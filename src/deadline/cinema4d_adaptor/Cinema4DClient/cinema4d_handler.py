@@ -50,11 +50,22 @@ class Cinema4DHandler:
         self.take = "Main"
         self.map_path = map_path
 
+    def _remap_assets(self) -> None:
+        asset_list: list[Dict[str, Any]] = []
+        c4d.documents.GetAllAssetsNew(
+            self.doc, allowDialogs=False, lastPath="", assetList=asset_list
+        )
+        for asset in asset_list:
+            asset_owner = asset.get("owner")
+            asset_param_id = asset.get("paramId")
+            if asset_owner and asset_param_id:
+                asset_owner[asset_param_id] = self.map_path(asset.get("filename", ""))
+
     def start_render(self, data: dict) -> None:
         self.doc = c4d.documents.GetActiveDocument()
         self.render_data = self.doc.GetActiveRenderData()
         self.render_data[c4d.RDATA_FRAMESEQUENCE] = c4d.RDATA_FRAMESEQUENCE_MANUAL
-        frame = int(self.render_kwargs["frame"])
+        frame = int(self.render_kwargs.get("frame", data.get("frame")))
         fps = self.doc.GetFps()
         self.render_data[c4d.RDATA_FRAMEFROM] = c4d.BaseTime(frame, fps)
         self.render_data[c4d.RDATA_FRAMETO] = c4d.BaseTime(frame, fps)
@@ -69,6 +80,8 @@ class Cinema4DHandler:
             self.render_data[c4d.RDATA_MULTIPASS_FILENAME] = self.map_path(
                 self.render_data[c4d.RDATA_MULTIPASS_FILENAME]
             )
+
+        self._remap_assets()
 
         bm = bitmaps.MultipassBitmap(
             int(self.render_data[c4d.RDATA_XRES]),
@@ -96,14 +109,14 @@ class Cinema4DHandler:
         if output_path:
             doc = c4d.documents.GetActiveDocument()
             render_data = doc.GetActiveRenderData()
-            render_data[c4d.RDATA_PATH] = output_path
+            render_data[c4d.RDATA_PATH] = self.map_path(output_path)
 
     def multi_pass_path(self, data: dict) -> None:
         multi_pass_path = data.get("multi_pass_path", "")
         if multi_pass_path:
             doc = c4d.documents.GetActiveDocument()
             render_data = doc.GetActiveRenderData()
-            render_data[c4d.RDATA_MULTIPASS_FILENAME] = multi_pass_path
+            render_data[c4d.RDATA_MULTIPASS_FILENAME] = self.map_path(multi_pass_path)
 
     def set_take(self, data: dict) -> None:
         """
